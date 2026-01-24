@@ -3,3 +3,12 @@ uvicorn
 sqlalchemy
 psycopg2-binary
 python-dotenv
+
+# AUTH
+passlib==1.7.4
+bcrypt==3.2.2
+python-jose[cryptography]
+email-validator
+
+python-jose[cryptography]
+
