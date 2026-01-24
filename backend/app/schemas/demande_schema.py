@@ -1,12 +1,33 @@
 from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
 
-class DemandeCreate(BaseModel):
+
+# =========================
+# 🔹 CREATE DEMANDE
+# =========================
+class CreateDemandeRequest(BaseModel):
     message: str
-    client_id: int
+    type_demande: Optional[str]
 
-class DemandeResponse(DemandeCreate):
-    id: int
+
+# =========================
+# 🔹 UPDATE STATUT (ADMIN)
+# =========================
+class UpdateStatutRequest(BaseModel):
     statut: str
 
+
+# =========================
+# 🔹 RESPONSE DEMANDE
+# =========================
+class DemandeResponse(BaseModel):
+    id: int
+    client_id: int
+    message: str
+    type_demande: Optional[str]
+    statut: str
+    date_creation: datetime
+
     class Config:
-        orm_mode = True
+        from_attributes = True

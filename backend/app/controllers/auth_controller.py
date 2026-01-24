@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.utilisateur import Utilisateur
-from app.auth.password import verify_password, hash_password
+from app.models.client import Client
+from app.auth.password import hash_password, verify_password
 from app.auth.jwt import create_access_token
 from app.schemas.auth_schema import LoginRequest, RegisterRequest
 
@@ -15,67 +16,60 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 # =========================
 @router.post("/login")
 def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(Utilisateur).filter(
-        Utilisateur.email == data.email
-    ).first()
+    try:
+        user = Utilisateur.get_by_email(db, data.email)
 
-    if not user or not verify_password(data.password, user.mot_de_passe):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Identifiants invalides"
-        )
+        if not user or not verify_password(data.password, user.mot_de_passe):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Identifiants invalides"
+            )
 
-    token = create_access_token({
-        "user_id": user.id,
-        "email": user.email,
-        "role": user.role_id  # CLIENT / AGENT / ADMIN
-    })
+        token = create_access_token({
+            "user_id": user.id,
+            "email": user.email,
+            "role": user.role_id
+        })
 
-    return {
-        "access_token": token,
-        "token_type": "bearer"
-    }
+        return {
+            "access_token": token,
+            "token_type": "bearer"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("❌ LOGIN ERROR:", e)
+        raise HTTPException(500, "Erreur interne lors du login")
 
 
 # =========================
-# REGISTER (CLIENT ONLY)
+# REGISTER (CLIENT)
 # =========================
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
-    # 1️⃣ Vérifier si l'email existe déjà
-    existing_user = db.query(Utilisateur).filter(
-        Utilisateur.email == data.email
-    ).first()
+    try:
+        if Utilisateur.get_by_email(db, data.email):
+            raise HTTPException(400, "Email déjà utilisé")
 
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email déjà utilisé"
+        user = Utilisateur.create(
+            db=db,
+            nom=data.nom,
+            email=data.email,
+            mot_de_passe=hash_password(data.password),
+            role_id=1  # CLIENT
         )
 
-    # 2️⃣ Créer un utilisateur CLIENT
-    new_user = Utilisateur(
-        nom=data.nom,
-        email=data.email,
-        mot_de_passe=hash_password(data.password),
-        role_id=1,  # ROLE CLIENT
-        actif=True
-    )
+        # création automatique du client
+        Client.create(db=db, utilisateur_id=user.id)
 
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+        return {
+            "message": "Inscription client réussie",
+            "email": user.email
+        }
 
-    return {
-        "message": "Inscription client réussie",
-        "email": new_user.email
-    }
-
-
-# =========================
-# LOGOUT (OPTIONNEL)
-# =========================
-@router.post("/logout")
-def logout():
-    # En JWT stateless, le logout est généralement géré côté frontend
-    return {"message": "Déconnexion réussie"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("❌ REGISTER ERROR:", e)
+        raise HTTPException(500, "Erreur interne lors de l'inscription")
